@@ -70,7 +70,6 @@ Game {
                 horizontalStep: -15 * scene.scrollFactor
             }
             layerType: Layer.Infinite
-
         }
 
         Entity {

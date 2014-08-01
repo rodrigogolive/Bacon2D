@@ -40,6 +40,7 @@ struct ImageLayerState
     QSGTexture *texture;
     qreal xPos;
     qreal yPos;
+    qreal mirrored;
 };
 // ImageLayerState
 
@@ -61,6 +62,7 @@ private:
     int m_idTexture;
     int m_idXPos;
     int m_idYPos;
+    int m_idMirrored;
 };
 // ImageLayerShader
 
@@ -73,6 +75,7 @@ public:
     void setRect(const QRectF &bounds);
     void updateXPos(const qreal pos);
     void updateYPos(const qreal pos);
+    void updateMirrored(bool mirrored);
 
     qreal imageWidth() const;
     qreal imageHeight() const;
@@ -124,6 +127,9 @@ protected:
 protected:
     void componentComplete();
 
+private slots:
+    void changeLayerType();
+
 private:
     QUrl m_source;
 
@@ -133,6 +139,7 @@ private:
     qreal m_verticalOffset;
 
     bool m_geometryChanged;
+    bool m_layerTypeChanged;
 };
 // ImageLayer
 

@@ -24,6 +24,7 @@
 
 #include <QImage>
 #include <QPainter>
+#include <QtCore/qmath.h>
 
 // ImageLayerShader
 const char *ImageLayerShader::vertexShader() const
@@ -49,9 +50,25 @@ const char *ImageLayerShader::fragmentShader() const {
         "uniform sampler2D texture;"
         "uniform highp float xPos;"
         "uniform highp float yPos;"
+        "uniform highp float mirrored;"
 
         "void main() {"
-        "   gl_FragColor = texture2D(texture, vec2(texCoord.x + xPos, texCoord.y + yPos)) * qt_Opacity;"
+        "   float newX = texCoord.x + xPos;"
+        "   float newY = texCoord.y + yPos;"
+
+        "   if (mirrored > .5) {"
+        //      check if new x position is odd or even
+        "       int coord = mod(newX, 2.);"
+        "       if (coord < 1)"
+        "           newX = 1 - texCoord.x - xPos;"
+
+        //      do the same for the new y
+        "       coord = mod(newY, 2.);"
+        "       if (coord < 1)"
+        "           newY = 1 - texCoord.y - yPos;"
+        "   }"
+
+        "   gl_FragColor = texture2D(texture, vec2(newX, newY)) * qt_Opacity;"
         "}";
 }
 
@@ -71,12 +88,16 @@ void ImageLayerShader::initialize()
     m_idTexture = program()->uniformLocation("texture");
     m_idXPos = program()->uniformLocation("xPos");
     m_idYPos = program()->uniformLocation("yPos");
+    m_idMirrored = program()->uniformLocation("mirrored");
 }
 
 void ImageLayerShader::updateState(const ImageLayerState *newState, const ImageLayerState *oldState)
 {
     if (!oldState)
         newState->texture->bind();
+
+    if (!oldState || oldState->mirrored != newState->mirrored)
+        program()->setUniformValue(m_idMirrored, (GLfloat)newState->mirrored);
 
     if (!oldState || oldState->xPos != newState->xPos)
         program()->setUniformValue(m_idXPos, (GLfloat)newState->xPos);
@@ -94,21 +115,12 @@ void ImageLayerShader::resolveUniforms()
 // ImageLayerNode
 ImageLayerNode::ImageLayerNode(QQuickWindow *window, const QString file, bool mirroredType)
 {
+    // if we are working with a Mirrored layer type, the initial image should be mirrored
+    // to be corrected displayed when handling its coordinates on the shader fragment
     QImage image(file);
-
-    // NOTE this is a workaround to get the mirrored effect at the end of the image
-    // ideally, do it using the shader program
-    if (mirroredType) {
-        QImage tempImage(image.width() * 2, image.height(), QImage::Format_ARGB32);
-        QPainter p(&tempImage);
-            p.drawImage(0, 0, image);
-            p.drawImage(image.width(), 0, image.mirrored(true, false));
-        p.end();
-
-        image = tempImage;
-    }
-
-    QSGTexture *texture = window->createTextureFromImage(image);
+    QSGTexture *texture = window->createTextureFromImage(mirroredType
+            ? image.mirrored(true, false)
+            : image);
 
     texture->setHorizontalWrapMode(QSGTexture::Repeat);
     texture->setVerticalWrapMode(QSGTexture::Repeat);
@@ -124,6 +136,7 @@ ImageLayerNode::ImageLayerNode(QQuickWindow *window, const QString file, bool mi
 
     updateXPos(0);
     updateYPos(0);
+    updateMirrored(mirroredType);
 
     QSGGeometry *g = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
     QSGGeometry::updateTexturedRectGeometry(g, QRect(), QRect());
@@ -156,6 +169,16 @@ void ImageLayerNode::updateYPos(const qreal pos)
     markDirty(QSGNode::DirtyMaterial);
 }
 
+void ImageLayerNode::updateMirrored(bool mirrored)
+{
+    QSGSimpleMaterial<ImageLayerState> *m =
+        static_cast<QSGSimpleMaterial<ImageLayerState> *>(material());
+
+    // shaders doesn't have boolean values
+    m->state()->mirrored = mirrored ? 1.0 : 0.0;
+    markDirty(QSGNode::DirtyMaterial);
+}
+
 qreal ImageLayerNode::imageWidth() const
 {
     return m_width;
@@ -182,8 +205,10 @@ ImageLayer::ImageLayer(Layer *parent)
     , m_imageWidth(0)
     , m_imageHeight(0)
     , m_geometryChanged(false)
+    , m_layerTypeChanged(false)
 {
     setFlag(ItemHasContents, true);
+    connect(this, SIGNAL(layerTypeChanged()), this, SLOT(changeLayerType()));
 }
 
 ImageLayer::~ImageLayer()
@@ -209,6 +234,25 @@ QUrl ImageLayer::source() const
 {
     return m_source;
 }
+
+// TODO check it
+//void ImageLayer::updateHorizontalStep()
+//{
+    //// XXX m_currentHorizontalStep is a pretty bad name
+    //// keeping it because we are planning moving the horizontalStep update logic to
+    //// the QML part (using ScriptBehavior)
+    //m_currentHorizontalStep += m_horizontalStep;
+
+    //int modifier = (m_type == Mirrored) ? 2 : 1;
+
+    //if (m_currentHorizontalStep <= -m_imageWidth * modifier)
+        //m_currentHorizontalStep = 0;
+    //else if (m_currentHorizontalStep >= 0)
+        //m_currentHorizontalStep = -m_imageWidth * modifier;
+
+    //// keeping it on the integer universe
+    //m_currentHorizontalStep = qCeil(m_currentHorizontalStep);
+//}
 
 QSGNode *ImageLayer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
@@ -314,5 +358,8 @@ void ImageLayer::setVerticalOffset(qreal offset)
     m_verticalOffset = offset;
 }
 
-
+void ImageLayer::changeLayerType()
+{
+    m_layerTypeChanged = true;
+}
 // ImageLayer
