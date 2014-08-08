@@ -23,8 +23,6 @@
 #include "imagelayer.h"
 
 #include <QImage>
-#include <QPainter>
-#include <QtCore/qmath.h>
 
 // ImageLayerShader
 const char *ImageLayerShader::vertexShader() const
@@ -234,25 +232,6 @@ QUrl ImageLayer::source() const
 {
     return m_source;
 }
-
-// TODO check it
-//void ImageLayer::updateHorizontalStep()
-//{
-    //// XXX m_currentHorizontalStep is a pretty bad name
-    //// keeping it because we are planning moving the horizontalStep update logic to
-    //// the QML part (using ScriptBehavior)
-    //m_currentHorizontalStep += m_horizontalStep;
-
-    //int modifier = (m_type == Mirrored) ? 2 : 1;
-
-    //if (m_currentHorizontalStep <= -m_imageWidth * modifier)
-        //m_currentHorizontalStep = 0;
-    //else if (m_currentHorizontalStep >= 0)
-        //m_currentHorizontalStep = -m_imageWidth * modifier;
-
-    //// keeping it on the integer universe
-    //m_currentHorizontalStep = qCeil(m_currentHorizontalStep);
-//}
 
 QSGNode *ImageLayer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
